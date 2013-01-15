@@ -185,7 +185,6 @@ private:
       inside check */
   typedef std::vector< RuleInst* > QRuleInsts;
   QRuleInsts d_ruleinsts_to_add;
-  bool d_ppAssert_on; //Indicate if a ppAssert have been done
 
  public:
   /** true and false for predicate */
@@ -212,7 +211,7 @@ private:
 
   Theory::PPAssertStatus ppAssert(TNode in, SubstitutionMap& outSubstitutions);
 
-  bool ppDontRewriteSubterm(TNode atom){ return true; }
+  bool ppDontRewriteSubterm(TNode atom){ return false; }
 
 
  private:
@@ -247,7 +246,7 @@ private:
                    TCache cache,
                    NodeBuilder<> & conjunction);
 
-  void addRewriteRule(const Node r);
+  void addRewriteRule(const Node r, bool only_for_preprocessing); // add a rewrite rules
   void computeMatchBody ( const RewriteRule * r, size_t start = 0);
   void addMatchRuleTrigger(const RewriteRule* r,
                            InstMatch & im, bool delay = true);

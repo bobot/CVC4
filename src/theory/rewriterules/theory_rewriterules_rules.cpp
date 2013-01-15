@@ -139,7 +139,7 @@ bool checkPatternVars(const std::vector<Node> & pattern,
 }
 
 /** Main function for construction of RewriteRule */
-void TheoryRewriteRules::addRewriteRule(const Node r)
+void TheoryRewriteRules::addRewriteRule(const Node r, bool only_for_preprocessing)
 {
   Assert(r.getKind() == kind::REWRITE_RULE);
   Kind rrkind = r[2].getKind();
@@ -263,6 +263,10 @@ void TheoryRewriteRules::addRewriteRule(const Node r)
     directrr = addRewritePattern(pattern[0],new_terms, inst_constants, vars);
   }
 
+  if(only_for_preprocessing){
+    Debug("rewriterules::new") << "created rewriterule for preprocessing "<< pattern[0] << " => " << new_terms << std::endl;
+    return;
+  }
 
   // final construction
   Trigger trigger = createTrigger(r,pattern);

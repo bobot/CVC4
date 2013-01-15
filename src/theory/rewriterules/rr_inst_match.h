@@ -173,7 +173,7 @@ public:
   /** reset instantiation round (call this whenever equivalence classes have changed) */
   virtual void resetInstantiationRound( QuantifiersEngine* qe ) = 0;
   /** reset the term to match, return false if there is no such term */
-  virtual bool reset( TNode n, InstMatch& m, QuantifiersEngine* qe ) = 0;
+  virtual bool reset( TNode n, InstMatch& m, QuantifiersEngine* qe) = 0;
   /** get the next match. If it return false once you shouldn't call
       getNextMatch again before doing a reset */
   virtual bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ) = 0;
@@ -229,12 +229,15 @@ public:
   virtual bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ) = 0;
   /** If reset, or getNextMatch return false they remove from the
       InstMatch the binding that they have previously created */
+
+  /* Set if the pattern matcher must update the value of m.d_matched */
+  virtual void update_d_matched( bool update_d_matched ) = 0;
 };
 
 Matcher* mkMatcher( Node pat, QuantifiersEngine* qe );
 PatMatcher* mkPattern( Node pat, QuantifiersEngine* qe );
 
-/* Match literal so you don't choose the equivalence class( */
+/* Multi-pattern */
 class PatsMatcher
 {
 public:

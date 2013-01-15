@@ -133,7 +133,7 @@ TheoryRewriteRules::TheoryRewriteRules(context::Context* c,
                                        QuantifiersEngine* qe) :
   Theory(THEORY_REWRITERULES, c, u, out, valuation, logicInfo, qe),
   d_rules(c), d_ruleinsts(c), d_guardeds(c), d_checkLevel(c,0),
-  d_explanations(c), d_ruleinsts_to_add(), d_ppAssert_on(false)
+  d_explanations(c), d_ruleinsts_to_add()
   {
   d_true = NodeManager::currentNM()->mkConst<bool>(true);
   d_false = NodeManager::currentNM()->mkConst<bool>(false);
@@ -186,12 +186,7 @@ void TheoryRewriteRules::check(Effort level) {
 
   while(!done()) {
     // Get all the assertions
-    // TODO: Test that it have already been ppAsserted
-
-    //if we are here and ppAssert has not been done
-    // that means that ppAssert is off so we need to assert now
-    if(!d_ppAssert_on) addRewriteRule(get());
-    else get();
+    addRewriteRule(get(), false /* For preprocessing and for normal use */);
     // Assertion assertion = get();
     // TNode fact = assertion.assertion;
 
@@ -411,7 +406,7 @@ void explainInstantiation(const RuleInst *inst, TNode substHead, NodeBuilder<> &
   // we should take care to use the representative that can't be directly rewritable:
   // If "car(a)" is somewhere and we know that "a = cons(x,l)" we shouldn't
   // add the constraint car(cons(x,l) = x because it is rewritten to x = x.
-  // But we should say cons(a) = x
+  // But we should say car(a) = x
   Assert(!inst->d_matched.isNull());
   Assert( inst->d_matched.getKind() == kind::APPLY_UF);
   Assert( substHead.getKind() == kind::APPLY_UF );
@@ -595,15 +590,14 @@ void TheoryRewriteRules::collectModelInfo( TheoryModel* m, bool fullModel ){
 }
 
 Theory::PPAssertStatus TheoryRewriteRules::ppAssert(TNode in, SubstitutionMap& outSubstitutions) {
-  //TODO: here add only to the rewriterules database for ppRewrite,
-  //and not for the general one. Otherwise rewriting that occur latter
-  //on this rewriterules will be lost. But if the rewriting of the
-  //body is not done in "in", will it be done latter after
-  //substitution? Perhaps we should add the rewriterules to the
-  //database for ppRewrite also after the subtitution at the levvel of check
-
-  // addRewriteRule(in);
-  // d_ppAssert_on = true;
+  // Don't work:
+  //  The top_level substitution is not applied on [in] and
+  //  it will never be applied to the result of this rewrite rule. So
+  //  if this rewrite rules is applied during ppRewrite it can replace
+  //  terms with completely new terms and it breakes the invariant that
+  //  the topLevelSubstitutions as been applied everywhere.
+  if(direct_rewrite && use_ppAssert && not options::rewriteRulesAsAxioms())
+    addRewriteRule(in,true /* only for preprocessing */ );
   return PP_ASSERT_STATUS_UNSOLVED;
 }
 

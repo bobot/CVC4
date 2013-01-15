@@ -126,11 +126,13 @@ class DumbMatcher: public Matcher{
 class DumbPatMatcher: public PatMatcher{
   void resetInstantiationRound( QuantifiersEngine* qe ){};
   bool reset( InstMatch& m, QuantifiersEngine* qe ){
+    m.d_matched == Node::null();
     return false;
   }
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return false;
   }
+  void update_d_matched( bool update_d_matched ){ }
 };
 
 
@@ -260,8 +262,10 @@ class CandidateGeneratorMatcher: public Matcher{
   CG d_cg;
   /** the sub-matcher */
   M d_m;
+  /** if d_matched must be updated */
+  bool d_update_d_matched;
 public:
-  CandidateGeneratorMatcher(CG cg, M m): d_cg(cg), d_m(m)
+  CandidateGeneratorMatcher(CG cg, M m): d_cg(cg), d_m(m), d_update_d_matched(false)
   {/* last is Null */};
   void resetInstantiationRound( QuantifiersEngine* qe ){
     d_cg.resetInstantiationRound();
@@ -275,11 +279,16 @@ public:
     // The sub-matcher has another match
     return d_m.getNextMatch(m, qe) || findMatch(m,qe);
   }
+
+  void update_d_matched( bool update_d_matched ){
+    d_update_d_matched = update_d_matched;
+  }
 private:
   bool findMatch( InstMatch& m, QuantifiersEngine* qe ){
     // Otherwise try to find a new candidate that has at least one match
     while(true){
       TNode n = d_cg.getNextCandidate();//kept somewhere Term-db
+      if(d_update_d_matched) m.d_matched = n;
       Debug("matching") << "GenCand " << n << " (" << this << ")" << std::endl;
       if(n.isNull()) return false;
       if(d_m.reset(n,m,qe)) return true;
@@ -287,7 +296,7 @@ private:
   }
 };
 
-/** Proxy that call the sub-matcher on the result return by the given candidate generator */
+/** Transforms a Matcher in PatMatcher by resetting it with Node::null() */
 template<class M>
 class PatOfMatcher: public PatMatcher{
   M d_m;
@@ -302,6 +311,9 @@ public:
   bool getNextMatch(InstMatch& m, QuantifiersEngine* qe){
     return d_m.getNextMatch(m,qe);
   };
+  void update_d_matched( bool update_d_matched ){
+    d_m.update_d_matched(update_d_matched);
+  }
 };
 
 class ArithMatcher: public Matcher{
@@ -468,6 +480,11 @@ public:
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return d_cgm.getNextMatch(m, qe);
   }
+
+  void update_d_matched( bool update_d_matched ){
+    d_cgm.update_d_matched( update_d_matched );
+  }
+
 };
 
 class DatatypesMatcher: public Matcher{
@@ -592,6 +609,9 @@ public:
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return d_cgm.getNextMatch(m, qe);
   }
+  void update_d_matched( bool update_d_matched ){
+    d_cgm.update_d_matched(update_d_matched );
+  }
 };
 
 template <bool classes> /** true classes | false class */
@@ -703,6 +723,9 @@ public:
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return d_cgm.getNextMatch(m, qe);
   }
+  void update_d_matched( bool update_d_matched ){
+    d_cgm.update_d_matched(update_d_matched );
+  }
 };
 
 class MetaCandidateGeneratorClasses: public CandidateGenerator{
@@ -793,6 +816,9 @@ public:
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return d_cgm.getNextMatch(m, qe);
   }
+  void update_d_matched( bool update_d_matched ){
+    d_cgm.update_d_matched( update_d_matched );
+  }
 };
 
 /** Match all the pattern with the same term */
@@ -839,6 +865,9 @@ public:
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return d_cgm.getNextMatch(m, qe);
   }
+  void update_d_matched( bool update_d_matched ){
+    d_cgm.update_d_matched( update_d_matched );
+  }
 };
 
 /** Match equalities */
@@ -881,6 +910,9 @@ public:
   }
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return d_cgm.getNextMatch(m, qe);
+  }
+  void update_d_matched( bool update_d_matched ){
+    d_cgm.update_d_matched( update_d_matched );
   }
 };
 
@@ -938,6 +970,9 @@ public:
   }
   bool getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
     return d_cgm.getNextMatch(m, qe);
+  }
+  void update_d_matched( bool update_d_matched ){
+    d_cgm.update_d_matched( update_d_matched );
   }
 };
 
@@ -1113,6 +1148,49 @@ bool ArithMatcher::getNextMatch( InstMatch& m, QuantifiersEngine* qe ){
   return false;
 };
 
+/* Mono Pattern but fill im.d_matched */
+
+class MonoPatsMatcher: public PatsMatcher{
+private:
+  bool d_reset_done;
+  PatMatcher* d_pattern;
+  InstMatch d_im;
+
+  bool reset( QuantifiersEngine* qe ){
+    d_im.clear();
+    d_reset_done = true;
+    return d_pattern->reset( d_im, qe );
+  };
+
+  bool getNextMatch(QuantifiersEngine* qe, bool reset){
+    return d_pattern->getNextMatch( d_im, qe );
+  }
+
+
+public:
+  MonoPatsMatcher(Node pat, QuantifiersEngine* qe):
+    d_reset_done(false){
+    d_pattern = mkPattern(pat,qe);
+    d_pattern->update_d_matched(true);
+  };
+  void resetInstantiationRound( QuantifiersEngine* qe ){
+    d_pattern->resetInstantiationRound( qe );
+    d_reset_done = false;
+    d_im.clear();
+  };
+  bool getNextMatch( QuantifiersEngine* qe ){
+    if(d_reset_done) return getNextMatch(qe,false);
+    else return reset(qe);
+  }
+  const InstMatch& getInstMatch(){return d_im;};
+
+  int addInstantiations( InstMatch& baseMatch, Node quant, QuantifiersEngine* qe){
+    Unimplemented("rr_inst_matcher::MonoPatsMatcher::addInstantiations");
+  }
+};
+
+
+/* MultiPattern */
 
 class MultiPatsMatcher: public PatsMatcher{
 private:
@@ -1171,6 +1249,30 @@ public:
   int addInstantiations( InstMatch& baseMatch, Node quant, QuantifiersEngine* qe);
 };
 
+int MultiPatsMatcher::addInstantiations( InstMatch& baseMatch, Node quant, QuantifiersEngine* qe){
+  //now, try to add instantiation for each match produced
+  int addedLemmas = 0;
+  resetInstantiationRound( qe );
+  d_im.add( baseMatch );
+  while( getNextMatch( qe ) ){
+    InstMatch im_copy = getInstMatch();
+    //m.makeInternal( d_quantEngine->getEqualityQuery() );
+    if( qe->addInstantiation( quant, im_copy ) ){
+      addedLemmas++;
+    }
+  }
+  //return number of lemmas added
+  return addedLemmas;
+}
+
+PatsMatcher* mkPatterns( std::vector< Node > pat, QuantifiersEngine* qe ){
+  if ( pat.size() == 1 ) return new MonoPatsMatcher ( pat[0], qe);
+  else                   return new MultiPatsMatcher( pat   , qe);
+}
+
+/** Efficient Matching */
+
+
 enum EffiStep{
   ES_STOP,
   ES_GET_MONO_CANDIDATE,
@@ -1197,26 +1299,98 @@ static inline std::ostream& operator<<(std::ostream& out, const EffiStep& step) 
   return out;
 }
 
+/** Monopattern */
+class MonoEfficientPatsMatcher: public PatsMatcher{
+private:
+  bool d_phase_new_term;
+  Matcher* d_direct_pattern;
+  InstMatch d_im;
+  EfficientHandler d_eh;
+  EfficientHandler::MultiCandidate d_mc;
+  Node d_pat;
+  static const EffiStep ES_START = ES_GET_MONO_CANDIDATE;
+  EffiStep d_step;
 
-int MultiPatsMatcher::addInstantiations( InstMatch& baseMatch, Node quant, QuantifiersEngine* qe){
-  //now, try to add instantiation for each match produced
-  int addedLemmas = 0;
-  resetInstantiationRound( qe );
-  d_im.add( baseMatch );
-  while( getNextMatch( qe ) ){
-    InstMatch im_copy = getInstMatch();
-    //m.makeInternal( d_quantEngine->getEqualityQuery() );
-    if( qe->addInstantiation( quant, im_copy ) ){
-      addedLemmas++;
+public:
+
+  bool getNextMatch( QuantifiersEngine* qe ){
+    Assert( d_step == ES_START || d_step == ES_NEXT1 || d_step == ES_STOP );
+    while(true){
+      Debug("matching") << "d_step=" << d_step << " "
+                        << "d_im=" << d_im << std::endl;
+      switch(d_step){
+      case ES_GET_MONO_CANDIDATE:
+        if(d_phase_new_term ? d_eh.getNextMonoCandidate(d_mc.first) : d_eh.getNextMonoCandidateNewTerm(d_mc.first)){
+          if(d_phase_new_term) ++qe->d_statistics.d_num_mono_candidates_new_term;
+          else ++qe->d_statistics.d_num_mono_candidates;
+          d_step = ES_RESET1;
+        } else if (!d_phase_new_term){
+          d_phase_new_term = true;
+          d_step = ES_GET_MONO_CANDIDATE;
+        } else {
+          d_phase_new_term = false;
+          d_step = ES_STOP;
+        }
+        break;
+      case ES_RESET1:
+        d_im.d_matched = d_mc.first.first;
+        if(d_direct_pattern->reset(d_mc.first.first,d_im,qe)){
+          d_step = ES_NEXT1;
+          return true;
+        } else d_step = ES_GET_MONO_CANDIDATE;
+        break;
+      case ES_NEXT1:
+        if(d_direct_pattern->getNextMatch(d_im,qe))
+          d_step = ES_NEXT1;
+        else d_step = ES_GET_MONO_CANDIDATE;
+        break;
+      case ES_STOP:
+        Assert(d_im.empty());
+        return false;
+      case ES_GET_MULTI_CANDIDATE:
+      case ES_RESET2:
+      case ES_NEXT2:
+      case ES_RESET_OTHER:
+      case ES_NEXT_OTHER:
+        Unreachable("Not used for MonoEfficientPatsMatcher");
+      }
     }
   }
-  //return number of lemmas added
-  return addedLemmas;
-}
 
-PatsMatcher* mkPatterns( std::vector< Node > pat, QuantifiersEngine* qe ){
-  return new MultiPatsMatcher( pat, qe);
-}
+
+  MonoEfficientPatsMatcher(Node pat, QuantifiersEngine* qe):
+    d_eh(qe->getTheoryEngine()->getSatContext()),
+    d_pat(pat), d_step(ES_START) {
+    if(pat.getKind()==kind::INST_CONSTANT){
+      d_direct_pattern=new VarMatcher(pat,qe);
+    } else if( pat.getKind() == kind::NOT && pat[0].getKind() == kind::EQUAL){
+      d_direct_pattern=new ApplyMatcher(pat[0],qe);
+    } else {
+      d_direct_pattern=new ApplyMatcher(pat,qe);
+    }
+    EfficientEMatcher* eem = qe->getEfficientEMatcher();
+    eem->registerEfficientHandler(d_eh, std::vector<Node> (1,pat));
+  };
+
+  void resetInstantiationRound( QuantifiersEngine* qe ){
+    Assert(d_step == ES_START || d_step == ES_STOP);
+    d_direct_pattern->resetInstantiationRound( qe );
+    d_step = ES_START;
+    d_phase_new_term = false;
+    Assert(d_im.empty());
+  };
+
+  const InstMatch& getInstMatch(){return d_im;};
+
+  int addInstantiations( InstMatch& baseMatch, Node quant, QuantifiersEngine* qe){
+    Unimplemented("rr_inst_matcher::MonoPatsMatcher::addInstantiations");
+  }
+
+};
+
+
+/** Multipatterns */
+
 
 class MultiEfficientPatsMatcher: public PatsMatcher{
 private:
@@ -1229,6 +1403,10 @@ private:
   EfficientHandler::MultiCandidate d_mc;
   InstMatchTrie2Pairs<true> d_cache;
   std::vector<Node> d_pats;
+
+  static const EffiStep ES_START = ES_GET_MONO_CANDIDATE;
+  EffiStep d_step;
+
   // bool indexDone( size_t i){
   //   return i == d_c.first.second ||
   //     ( i == d_c.second.second && d_c.second.first.empty());
@@ -1236,8 +1414,6 @@ private:
 
 
 
-  static const EffiStep ES_START = ES_GET_MONO_CANDIDATE;
-  EffiStep d_step;
 
   //return true if it becomes bigger than d_patterns.size() - 1
   bool incrIndex(size_t & index){
@@ -1439,7 +1615,8 @@ int MultiEfficientPatsMatcher::addInstantiations( InstMatch& baseMatch, Node qua
 };
 
 PatsMatcher* mkPatternsEfficient( std::vector< Node > pat, QuantifiersEngine* qe ){
-  return new MultiEfficientPatsMatcher( pat, qe);
+  if ( pat.size() == 1 ) return new MonoEfficientPatsMatcher ( pat[0], qe);
+  else                   return new MultiEfficientPatsMatcher( pat   , qe);
 }
 
 } /* CVC4::theory::rrinst */

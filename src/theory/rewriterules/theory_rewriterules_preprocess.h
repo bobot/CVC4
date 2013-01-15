@@ -72,6 +72,16 @@ namespace rewriter {
         const TMPNode & t = p.first;
         const TMPNode & pat = p.second;
 
+        if( t.getKind() == kind::BOUND_VARIABLE ||
+            t.getKind() == kind::INST_CONSTANT ||
+            t.getKind() == kind::VARIABLE){
+          //We are matching something that contains variable so it's
+          //in a quantifier or a rewrite rules (or worse it's the rule
+          //that produced the pattern). We fail.
+          return Node::null();
+        }
+
+
         // pat is a variable
         if( pat.getKind() == kind::INST_CONSTANT ||
             pat.getKind() == kind::VARIABLE){
@@ -114,10 +124,17 @@ namespace rewriter {
 
     Node run(TMPNode node){
       Node n;
+      Node tmp;
       for (Patterns::iterator i = d_matches.begin();
            i != d_matches.end() && n.isNull(); ++i){
-        Debug("rewriterules-rewrite") << "test?" << i->pattern << std::endl;
-        n = i->run(node);
+        Debug("rewriterules-rewrite") << "match " << node << " against " << i->pattern << std::endl;
+        tmp = i->run(node);
+        if ( !tmp.isNull() ){
+          Debug("rewriterules-rewrite") << "  match to " << tmp << std::endl;
+          n = tmp;
+        } else {
+          Debug("rewriterules-rewrite") << "  don't match" << std::endl;
+        }
       }
       return n;
     }
@@ -151,9 +168,8 @@ public:
   Node ppRewrite(TNode node){
     Debug("rewriterules-rewrite") << "rewrite?" << node << std::endl;
     Node t = d_pattern.run(node);
-    Debug("rewriterules-rewrite") << "rewrite:" << node
-                                  << (t.isNull()? " to": " to ")
-                                  << t << std::endl;
+    if ( !t.isNull() )
+      Debug("rewriterules-rewrite") << "rewrite:" << node << " to " << t << std::endl;
     if (t.isNull()) return node;
     else return t;
   }

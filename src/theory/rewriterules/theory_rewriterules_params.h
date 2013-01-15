@@ -75,9 +75,17 @@ static const bool simulateRewritting = true;
 static const bool narrowing_full_effort = false;
 
 /**
-   Direct rewrite: Add rewrite rules directly in the rewriter.
+   Direct rewrite: Use rewrite rules directly in ppRewrite (of uf).
  */
-static const bool direct_rewrite = false;
+static const bool direct_rewrite = true;
+
+/**
+   Use the rule seen during ppAssert for ppRewrite. In theory allows
+   to rewrite immediately and remove not normalized terms for ever
+   appearing. But in pratice the subtitution are not applied on them
+   and so the rewrite rules becomes incomplete.
+ */
+static const bool use_ppAssert = false;
 
 }/* CVC4::theory::rewriterules namespace */
 }/* CVC4::theory namespace */
